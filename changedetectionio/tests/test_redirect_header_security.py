@@ -14,7 +14,7 @@ def _serve(server):
     Thread(target=server.serve_forever, daemon=True).start()
 
 
-def test_api_created_watch_forwards_sensitive_headers_to_cross_origin_redirect(
+def test_api_created_watch_does_not_forward_sensitive_headers_to_cross_origin_redirect(
     client, live_server, measure_memory_usage
 ):
     received = []
@@ -79,10 +79,10 @@ def test_api_created_watch_forwards_sensitive_headers_to_cross_origin_redirect(
         assert not watch.get("last_error"), watch.get("last_error")
 
         assert received, "The redirect sink was never reached by the application worker"
-        leaked = received[-1]
-        assert leaked.get("authorization") == synthetic_headers["Authorization"]
-        assert leaked.get("x-api-key") == synthetic_headers["X-API-Key"]
-        assert leaked.get("cookie") == synthetic_headers["Cookie"]
+        redirected_headers = received[-1]
+        assert "authorization" not in redirected_headers
+        assert "x-api-key" not in redirected_headers
+        assert "cookie" not in redirected_headers
     finally:
         source.shutdown()
         sink.shutdown()
