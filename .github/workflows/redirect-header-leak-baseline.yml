@@ -1,0 +1,32 @@
+name: Redirect header leak baseline probe
+
+on:
+  push:
+    branches:
+      - audit/cross-origin-redirect-header-integration
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  redirect-header-leak-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+      - name: Run baseline leak test
+        env:
+          ALLOW_IANA_RESTRICTED_ADDRESSES: "true"
+        run: |
+          pytest -q changedetectionio/tests/test_redirect_header_security.py
