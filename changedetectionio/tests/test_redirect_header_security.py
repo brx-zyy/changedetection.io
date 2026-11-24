@@ -39,10 +39,12 @@ def _serve(server):
 def test_api_created_watch_does_not_forward_sensitive_headers_to_cross_origin_redirect(
     client, live_server, measure_memory_usage
 ):
-    received = []
+    source_received = []
+    sink_received = []
 
     class RedirectHandler(BaseHTTPRequestHandler):
         def do_GET(self):
+            source_received.append({key.lower(): value for key, value in self.headers.items()})
             self.send_response(302)
             self.send_header("Location", f"http://127.0.0.1:{sink.server_port}/collect")
             self.end_headers()
@@ -52,7 +54,7 @@ def test_api_created_watch_does_not_forward_sensitive_headers_to_cross_origin_re
 
     class SinkHandler(BaseHTTPRequestHandler):
         def do_GET(self):
-            received.append({key.lower(): value for key, value in self.headers.items()})
+            sink_received.append({key.lower(): value for key, value in self.headers.items()})
             body = b"redirect sink reached"
             self.send_response(200)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
@@ -100,11 +102,20 @@ def test_api_created_watch_does_not_forward_sensitive_headers_to_cross_origin_re
         watch = datastore.data["watching"][watch_uuid]
         assert not watch.get("last_error"), watch.get("last_error")
 
-        assert received, "The redirect sink was never reached by the application worker"
-        redirected_headers = received[-1]
-        assert "authorization" not in redirected_headers
-        assert "x-api-key" not in redirected_headers
-        assert "cookie" not in redirected_headers
+        assert source_received, "The source endpoint was never reached"
+        assert sink_received, "The redirect sink was never reached by the application worker"
+
+        # Prove the watch sent the configured credentials to the intended origin.
+        initial_headers = source_received[0]
+        assert initial_headers.get("authorization") == synthetic_headers["Authorization"]
+        assert initial_headers.get("x-api-key") == synthetic_headers["X-API-Key"]
+        assert initial_headers.get("cookie") == synthetic_headers["Cookie"]
+
+        # Every request received by the redirected origin must be credential-free.
+        for redirected_headers in sink_received:
+            assert "authorization" not in redirected_headers
+            assert "x-api-key" not in redirected_headers
+            assert "cookie" not in redirected_headers
     finally:
         source.shutdown()
         sink.shutdown()
