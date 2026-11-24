@@ -35,7 +35,11 @@ def _headers_for_redirect(headers, source_url, destination_url):
     by name (for example, tenant-specific API keys), so drop the entire
     configured header set rather than trying to maintain a fragile denylist.
     """
-    if _url_origin(source_url) != _url_origin(destination_url):
+    source_origin = _url_origin(source_url)
+    destination_origin = _url_origin(destination_url)
+    # Fail closed: an unparseable URL must never be treated as same-origin
+    # merely because both origin lookups returned None.
+    if source_origin is None or destination_origin is None or source_origin != destination_origin:
         return {}
     return headers
 
