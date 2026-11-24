@@ -141,3 +141,35 @@ def test_dropped_headers_stay_dropped_for_later_same_origin_hop():
     assert _headers_for_redirect(
         after_cross_origin, "https://attacker.example/collect", "https://attacker.example/next"
     ) == {}
+
+def test_redirect_headers_preserved_for_http_default_port_normalization():
+    headers = {"Authorization": "Bearer synthetic-secret"}
+    assert _headers_for_redirect(headers, "http://example.com/start", "http://example.com:80/next") is headers
+
+
+def test_redirect_headers_dropped_for_https_to_http_downgrade():
+    headers = {"Authorization": "Bearer synthetic-secret"}
+    assert _headers_for_redirect(headers, "https://example.com/start", "http://example.com/collect") == {}
+
+
+def test_redirect_headers_preserved_for_equivalent_ipv6_origin():
+    headers = {"X-API-Key": "synthetic-secret"}
+    assert _headers_for_redirect(headers, "http://[::1]/start", "http://[::1]:80/next") is headers
+
+
+def test_redirect_headers_dropped_for_different_ipv6_host():
+    headers = {"X-API-Key": "synthetic-secret"}
+    assert _headers_for_redirect(headers, "http://[::1]/start", "http://[::2]/collect") == {}
+
+
+def test_redirect_headers_dropped_for_malformed_port():
+    headers = {"Authorization": "Bearer synthetic-secret"}
+    assert _headers_for_redirect(headers, "http://example.com:invalid/start", "http://example.com/next") == {}
+
+
+def test_redirect_headers_remain_dropped_after_cross_origin_and_return_to_original_origin():
+    headers = {"Authorization": "Bearer synthetic-secret", "X-API-Key": "synthetic-key"}
+    after_first_hop = _headers_for_redirect(headers, "https://origin.example/start", "https://other.example/collect")
+    after_return_hop = _headers_for_redirect(after_first_hop, "https://other.example/collect", "https://origin.example/final")
+    assert after_first_hop == {}
+    assert after_return_hop == {}
