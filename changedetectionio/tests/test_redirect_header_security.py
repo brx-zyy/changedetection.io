@@ -9,6 +9,28 @@ from threading import Thread
 
 from changedetectionio.tests.util import wait_for_all_checks
 
+from changedetectionio.content_fetchers.requests import _headers_for_redirect
+
+
+def test_redirect_headers_preserved_for_same_origin():
+    headers = {"Authorization": "Bearer synthetic-secret"}
+    assert _headers_for_redirect(headers, "https://example.com/start", "https://example.com:443/next") is headers
+
+
+def test_redirect_headers_dropped_for_different_port():
+    headers = {"Authorization": "Bearer synthetic-secret"}
+    assert _headers_for_redirect(headers, "http://example.com:8080/start", "http://example.com:8081/next") == {}
+
+
+def test_redirect_headers_dropped_for_different_scheme():
+    headers = {"Authorization": "Bearer synthetic-secret"}
+    assert _headers_for_redirect(headers, "http://example.com/start", "https://example.com/next") == {}
+
+
+def test_redirect_headers_dropped_when_origin_cannot_be_parsed():
+    headers = {"Authorization": "Bearer synthetic-secret"}
+    assert _headers_for_redirect(headers, "not a valid URL", "also invalid") == {}
+
 
 def _serve(server):
     Thread(target=server.serve_forever, daemon=True).start()
