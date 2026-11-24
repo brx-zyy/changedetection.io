@@ -6,7 +6,6 @@ what the redirect destination receives.
 """
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
-from urllib.parse import urlsplit
 
 from changedetectionio.tests.util import wait_for_all_checks
 
@@ -67,6 +66,7 @@ def test_api_created_watch_forwards_sensitive_headers_to_cross_origin_redirect(
             },
         )
         assert response.status_code == 201, response.get_data(as_text=True)
+        watch_uuid = response.get_json()["uuid"]
 
         # Explicitly queue the newly created watch through the public API.
         queued = client.get(
@@ -75,6 +75,8 @@ def test_api_created_watch_forwards_sensitive_headers_to_cross_origin_redirect(
         )
         assert queued.status_code in (200, 202), queued.get_data(as_text=True)
         wait_for_all_checks(client)
+        watch = datastore.data["watching"][watch_uuid]
+        assert not watch.get("last_error"), watch.get("last_error")
 
         assert received, "The redirect sink was never reached by the application worker"
         leaked = received[-1]
