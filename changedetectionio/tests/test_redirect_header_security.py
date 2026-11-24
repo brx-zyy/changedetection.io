@@ -121,3 +121,23 @@ def test_api_created_watch_does_not_forward_sensitive_headers_to_cross_origin_re
         sink.shutdown()
         source.server_close()
         sink.server_close()
+
+def test_redirect_headers_preserved_for_case_insensitive_host_and_default_port():
+    headers = {"X-API-Key": "synthetic-secret"}
+    assert _headers_for_redirect(headers, "https://EXAMPLE.com/start", "https://example.com:443/next") is headers
+
+
+def test_redirect_headers_dropped_for_different_hostname():
+    headers = {"X-API-Key": "synthetic-secret"}
+    assert _headers_for_redirect(headers, "https://example.com/start", "https://attacker.example/collect") == {}
+
+
+def test_dropped_headers_stay_dropped_for_later_same_origin_hop():
+    headers = {"Authorization": "Bearer synthetic-secret"}
+    after_cross_origin = _headers_for_redirect(
+        headers, "https://example.com/start", "https://attacker.example/collect"
+    )
+    assert after_cross_origin == {}
+    assert _headers_for_redirect(
+        after_cross_origin, "https://attacker.example/collect", "https://attacker.example/next"
+    ) == {}
