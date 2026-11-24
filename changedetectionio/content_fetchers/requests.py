@@ -12,6 +12,38 @@ from changedetectionio.content_fetchers.base import Fetcher
 from changedetectionio.validate_url import is_fetch_url_allowed, is_private_hostname, is_url_private_or_parser_confused
 
 
+def _url_origin(url):
+    """Return a normalized HTTP origin, or None when the URL is malformed."""
+    try:
+        parsed = urlparse(url)
+        scheme = parsed.scheme.lower()
+        hostname = (parsed.hostname or "").lower()
+        if scheme not in ("http", "https") or not hostname:
+            return None
+        port = parsed.port
+        if port is None:
+            port = 443 if scheme == "https" else 80
+        return scheme, hostname, port
+    except (TypeError, ValueError):
+        return None
+
+
+def _headers_for_redirect(headers, source_url, destination_url):
+    """Never forward configured request headers to a different origin.
+
+    Custom headers can contain credentials that cannot be identified reliably
+    by name (for example, tenant-specific API keys), so drop the entire
+    configured header set rather than trying to maintain a fragile denylist.
+    """
+    source_origin = _url_origin(source_url)
+    destination_origin = _url_origin(destination_url)
+    # Fail closed: an unparseable URL must never be treated as same-origin
+    # merely because both origin lookups returned None.
+    if source_origin is None or destination_origin is None or source_origin != destination_origin:
+        return {}
+    return headers
+
+
 # "html_requests" is listed as the default fetcher in store.py!
 class fetcher(Fetcher):
     fetcher_description = _l("Basic fast Plaintext/HTTP Client")
@@ -126,6 +158,10 @@ class fetcher(Fetcher):
                     if is_url_private_or_parser_confused(redirect_url):
                         raise Exception(f"Redirect blocked: '{redirect_url}' resolves to a private/reserved IP address "
                                         f"or contains a parser-differential payload.")
+                redirect_headers = _headers_for_redirect(request_headers, current_url, redirect_url)
+                if not redirect_headers and request_headers:
+                    logger.debug("Dropping configured request headers after cross-origin redirect")
+                request_headers = redirect_headers
                 current_url = redirect_url
                 r = session.request('GET', redirect_url,
                                     headers=request_headers,
